@@ -4,8 +4,10 @@ import logging
 from datetime import datetime, timezone
 
 import pytest
+from fastapi.testclient import TestClient
 
 from app import clock, storage
+from app.main import app
 
 TODAY = datetime(2026, 10, 5, 12, 0, tzinfo=timezone.utc)
 REASON = "Jāsaņem būvvaldes atzinums"
@@ -212,3 +214,21 @@ def test_crc_extend_twice_ok(client):
         for entry in client.get(f"/submissions/{submission_id}/audit").json()
     ]
     assert actions == ["EXTEND", "EXTEND"]
+
+
+# Atradums: 500 atbildē nedrīkst būt iekšējā informācija (kontrolsaraksta 5. punkts).
+def test_crc_finding_500_hides_internal_details(client, monkeypatch):
+    # Ieraksts pazūd starp nolasīšanu un atjaunināšanu: update_due_date met LookupError.
+    record = {
+        **PERSON,
+        "status": "RECEIVED",
+        "receivedAt": "2026-09-25T13:40:00+00:00",
+        "dueDate": "2026-10-26",
+    }
+    monkeypatch.setattr(storage, "get", lambda submission_id: record)
+    response = _extend(
+        TestClient(app, raise_server_exceptions=False), "IES-2026-999999", "2026-12-15"
+    )
+    _assert_error(response, 500, "INTERNAL_ERROR")
+    assert "sqlite" not in response.text
+    assert ":memory:" not in response.text

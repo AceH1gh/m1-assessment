@@ -1,8 +1,12 @@
 """Kļūdu atbildes pēc līguma (API contract) vienotās kļūdu shēmas."""
 
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+
+logger = logging.getLogger("ezermala.errors")
 
 
 class SubmissionNotFound(Exception):
@@ -65,4 +69,7 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def unexpected_error(request: Request, exc: Exception):
-        return error_response(500, "INTERNAL_ERROR", str(exc))
+        # Izņēmuma tekstu neatkārtojam: tajā var būt datubāzes informācija
+        # vai ievades vērtības ar personas datiem. Žurnālā tikai tips un ceļš.
+        logger.error("Neparedzēta kļūda %s: %s", type(exc).__name__, request.url.path)
+        return error_response(500, "INTERNAL_ERROR", "Internal server error")
