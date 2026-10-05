@@ -254,3 +254,11 @@ def test_crc_finding_500_hides_internal_details(client, monkeypatch):
     _assert_error(response, 500, "INTERNAL_ERROR")
     assert "sqlite" not in response.text
     assert ":memory:" not in response.text
+
+
+# Darbinieka lapā ir pagarināšanas forma (tvēruma paplašinājums, sk. PR).
+def test_crc_ui_employee_page_has_extend_form(client):
+    page = client.get("/ui/darbinieks.html")
+    assert page.status_code == 200
+    assert 'id="extend"' in page.text
+    assert "/extend" in page.text
