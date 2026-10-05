@@ -196,9 +196,7 @@ def extend_submission(submission_id: str, data: ExtendRequest) -> Submission:
     )
     current_due = date.fromisoformat(record["dueDate"])
     latest_due = add_months(received_on, MAX_EXTENSION_MONTHS)
-    # Pieņēmums (PR): jaunais termiņš nedrīkst būt pagātnē. Šodiena ir atļauta.
-    today = clock.now().date()
-    if not current_due < data.newDueDate <= latest_due or data.newDueDate < today:
+    if not current_due < data.newDueDate <= latest_due:
         raise InvalidDueDate()
 
     record = storage.update_due_date(submission_id, data.newDueDate.isoformat())

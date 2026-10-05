@@ -3,9 +3,8 @@
 import re
 from datetime import date, datetime
 from enum import Enum
-from typing import Annotated
 
-from pydantic import BaseModel, StringConstraints, field_validator
+from pydantic import BaseModel, Field, field_validator
 from pydantic_core import PydanticCustomError
 
 # CR-1: 11 cipari vai DDMMYY-NNNNN. Tikai formāts, bez kontrolcipara.
@@ -99,16 +98,23 @@ class SubmissionListItem(BaseModel):
 
 class ExtendRequest(BaseModel):
     newDueDate: date
-    # Malu atstarpes noņem pirms garuma pārbaudes: tikai atstarpes nav iemesls.
-    reason: Annotated[
-        str, StringConstraints(strip_whitespace=True, min_length=10, max_length=500)
-    ]
+    reason: str = Field(min_length=10, max_length=500)
 
     @field_validator("newDueDate", mode="before")
     @classmethod
     def require_iso_date(cls, value):
         if not isinstance(value, str) or not ISO_DATE.fullmatch(value):
             raise PydanticCustomError("invalid_format", "Nepareizs datuma formāts")
+        return value
+
+    @field_validator("reason")
+    @classmethod
+    def strip_reason(cls, value: str) -> str:
+        # Garums 10–500 ir pārbaudīts pēc līguma. Arī bez malu atstarpēm jābūt
+        # vismaz 10 rakstzīmēm: tikai atstarpes nav saprotams iemesls.
+        value = value.strip()
+        if len(value) < 10:
+            raise PydanticCustomError("string_too_short", "Iemesls ir pārāk īss")
         return value
 
 

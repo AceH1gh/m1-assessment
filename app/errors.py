@@ -69,7 +69,8 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def unexpected_error(request: Request, exc: Exception):
-        # Izņēmuma tekstu neatkārtojam: tajā var būt datubāzes informācija
-        # vai ievades vērtības ar personas datiem. Žurnālā tikai tips un ceļš.
+        # Izņēmuma tekstu klientam neatkārtojam: tajā var būt datubāzes informācija
+        # vai ievades vērtības ar personas datiem. Šajā ierakstā tikai tips un ceļš;
+        # pilnu traceback papildus žurnālā raksta serveris (uvicorn).
         logger.error("Neparedzēta kļūda %s: %s", type(exc).__name__, request.url.path)
         return error_response(500, "INTERNAL_ERROR", "Internal server error")

@@ -94,6 +94,12 @@ def test_crc_ac5_wrong_status_409(client, status):
     assert _due_date(client, submission_id) == "2026-10-26"
 
 
+def test_crc_ac5_status_checked_before_date(client):
+    submission_id = _submission(status="FORWARDED", due="2026-10-26")
+    response = _extend(client, submission_id, "2028-01-01")
+    _assert_error(response, 409, "INVALID_STATE")
+
+
 def test_crc_ac6_unknown_id_404(client):
     response = _extend(client, "IES-2026-999999", "2026-12-15")
     _assert_error(response, 404, "NOT_FOUND")
@@ -108,10 +114,28 @@ def test_crc_ac6_unknown_id_404(client):
         ({"newDueDate": "2026-02-30", "reason": REASON}, "newDueDate"),
         ({"newDueDate": "1797292800", "reason": REASON}, "newDueDate"),
         ({"newDueDate": "2026-12-15T00:00:00Z", "reason": REASON}, "newDueDate"),
+        ({"newDueDate": 20261215, "reason": REASON}, "newDueDate"),
+        ({"newDueDate": None, "reason": REASON}, "newDueDate"),
         ({"newDueDate": "2026-12-15", "reason": "a" * 9}, "reason"),
         ({"newDueDate": "2026-12-15", "reason": "a" * 501}, "reason"),
+        ({"newDueDate": "2026-12-15", "reason": "a" * 500 + "   "}, "reason"),
         ({"newDueDate": "2026-12-15", "reason": " " * 12}, "reason"),
         ({"newDueDate": "2026-12-15", "reason": "  " + "a" * 9 + "  "}, "reason"),
+    ],
+    ids=[
+        "no_date",
+        "no_reason",
+        "date_dotted",
+        "date_feb_30",
+        "date_unix_string",
+        "date_with_time",
+        "date_number",
+        "date_null",
+        "reason_9",
+        "reason_501",
+        "reason_500_plus_spaces",
+        "reason_only_spaces",
+        "reason_9_inside_spaces",
     ],
 )
 def test_crc_ac7_validation_400(client, body, field):
@@ -175,31 +199,29 @@ def test_crc_ac9_no_personal_data_in_logs_or_errors(client, caplog):
         ("2027-10-31T09:00:00+00:00", "2027-11-30", "2028-03-01", 400),
     ],
 )
-def test_crc_open_question_month_end(
-    client, monkeypatch, received, due, new_due_date, expected
-):
-    monkeypatch.setattr(clock, "now", lambda: datetime.fromisoformat(received))
+def test_crc_open_question_month_end(client, received, due, new_due_date, expected):
     submission_id = _submission(received=received, due=due)
     response = _extend(client, submission_id, new_due_date)
     assert response.status_code == expected
 
 
-# Pieņēmums: jaunais termiņš nedrīkst būt pagātnē. Šodiena ir atļauta.
-def test_crc_past_date_400(client):
-    submission_id = _submission(
-        status="IN_PROGRESS", received="2026-08-20T10:00:00+00:00", due="2026-09-21"
-    )
-    response = _extend(client, submission_id, "2026-10-04")
-    _assert_error(response, 400, "INVALID_DUE_DATE")
-    assert _due_date(client, submission_id) == "2026-09-21"
-
-
-def test_crc_today_ok(client):
-    submission_id = _submission(
-        status="IN_PROGRESS", received="2026-08-20T10:00:00+00:00", due="2026-09-21"
-    )
-    response = _extend(client, submission_id, "2026-10-05")
+# Precizējums: 4 mēnešus skaita no receivedAt datuma pēc UTC.
+# 2026-09-30T23:30-05:00 ir 2026-10-01 pēc UTC, tātad robeža ir 2027-02-01.
+def test_crc_received_date_counted_in_utc(client):
+    submission_id = _submission(received="2026-09-30T23:30:00-05:00", due="2026-10-31")
+    response = _extend(client, submission_id, "2027-02-01")
     assert response.status_code == 200
+
+
+# Līgums: pārbauda tikai dueDate un 4 mēnešu robežu. Arī nokavētu termiņu
+# drīkst pagarināt, pat ja jaunais termiņš jau ir pagājis (šodien 2026-10-05).
+def test_crc_ac1_overdue_submission_can_be_extended(client):
+    submission_id = _submission(
+        status="IN_PROGRESS", received="2026-08-20T10:00:00+00:00", due="2026-09-21"
+    )
+    response = _extend(client, submission_id, "2026-10-01")
+    assert response.status_code == 200
+    assert response.json()["dueDate"] == "2026-10-01"
 
 
 # Precizējums: termiņu drīkst pagarināt vairākas reizes.
