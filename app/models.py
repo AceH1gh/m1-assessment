@@ -3,12 +3,15 @@
 import re
 from datetime import date, datetime
 from enum import Enum
+from typing import Annotated
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, StringConstraints, field_validator
 from pydantic_core import PydanticCustomError
 
 # CR-1: 11 cipari vai DDMMYY-NNNNN. Tikai formāts, bez kontrolcipara.
 PERSONAL_CODE = re.compile(r"[0-9]{6}-?[0-9]{5}")
+# CR-C: tikai YYYY-MM-DD. Pydantic pats pieņemtu arī Unix laiku un datumu ar laiku.
+ISO_DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 
 
 class PreferredChannel(str, Enum):
@@ -92,6 +95,21 @@ class SubmissionListItem(BaseModel):
     receivedAt: datetime
     dueDate: date
     replyChannel: ReplyChannel
+
+
+class ExtendRequest(BaseModel):
+    newDueDate: date
+    # Malu atstarpes noņem pirms garuma pārbaudes: tikai atstarpes nav iemesls.
+    reason: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=10, max_length=500)
+    ]
+
+    @field_validator("newDueDate", mode="before")
+    @classmethod
+    def require_iso_date(cls, value):
+        if not isinstance(value, str) or not ISO_DATE.fullmatch(value):
+            raise PydanticCustomError("invalid_format", "Nepareizs datuma formāts")
+        return value
 
 
 class AuditEntry(BaseModel):
